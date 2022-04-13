@@ -1,4 +1,4 @@
-import apikeys
+import config
 import discord
 from discord import Client
 from discord.ext import commands
@@ -17,5 +17,5 @@ async def on_ready():
 #add cogs to the bot
 bot.add_cog(Music(bot))
 
-bot.run(apikeys.TOKEN)
+bot.run(config.DISCORD_BOT_TOKEN)
 

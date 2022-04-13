@@ -4,6 +4,11 @@ from discord.ext import commands
 from discord import FFmpegPCMAudio
 import youtube_dl
 
+from lyricsgenius import Genius
+from config import GENIUS_API_TOKEN
+
+from formatting import *
+
 #options used to fetch the song from Youtube and create an OPUS encoded source from it
 YDL_OPTIONS = {
         'format': 'bestaudio/best',
@@ -18,27 +23,35 @@ FFMPEG_OPTIONS = {
     'options': '-vn'
 }
 
-#uses video_id as a search request from Youtube, uses the first entry in results, returning it as an OPUS encoded source
-async def get_source(video_id):
-        with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
-            song_url = ydl.extract_info(f"ytsearch:{video_id}", download=False)['entries'][0]['formats'][0]['url']
+#uses video_id to search and extract info of an audio through ytdl
+async def get_audio(video_id):
+    with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
+        return ydl.extract_info(f"ytsearch:{video_id}", download=False)['entries'][0]
 
-            source = await discord.FFmpegOpusAudio.from_probe(song_url, **FFMPEG_OPTIONS)
-            return source
+#takes in a url of an audio and return an opus formatted source to be played
+async def get_source(url):
+    source = await discord.FFmpegOpusAudio.from_probe(url, **FFMPEG_OPTIONS)
+    return source
 
 class Music(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.song_queue = dict()
-
+        self.curr_audio = None
+        self.genius = Genius(GENIUS_API_TOKEN)
+    
     async def play_next_song(self, ctx):
         id = ctx.guild.id
         vc = ctx.voice_client
         if self.song_queue[id] != [] and (vc):
-            song_name = self.song_queue[id].pop(0)
-            source = await get_source(song_name)
-            await ctx.send(f"Playing the {song_name} now.")
+            audio_name = self.song_queue[id].pop(0)
+            self.curr_audio = await get_audio(audio_name)
+            source = await get_source(self.curr_audio['formats'][0]['url'])
+
+            await ctx.send(f"Playing the {self.curr_audio['title']} now.")
             vc.play(source, after = lambda err = None : self.bot.loop.create_task( self.play_next_song(ctx) ) )
+        else:
+            self.curr_audio = None
 
     @commands.command(pass_context = True)
     async def play(self, ctx, *args):
@@ -62,12 +75,11 @@ class Music(commands.Cog):
         else:
             vc = ctx.voice_client
         
-        if vc.is_playing():
-            self.song_queue[ctx.guild.id].append(song_name)
-        else:
-            source = await get_source(song_name)
-            await ctx.send(f"Playing the {song_name} now.")
-            vc.play(source, after = lambda err = None : self.bot.loop.create_task( self.play_next_song(ctx) ) )
+        self.song_queue[ctx.guild.id].append(song_name)
+
+        if not vc.is_playing():
+            await self.play_next_song(ctx)
+            
 
     @commands.command(pass_context = True)
     async def skip(self, ctx):
@@ -90,7 +102,7 @@ class Music(commands.Cog):
         await ctx.send(f"Stopped playing.")
 
     @commands.command(pass_context = True)
-    async def pause(ctx):
+    async def pause(self, ctx):
         vc = ctx.voice_client
         if vc is None or not vc.is_playing():
             return await ctx.send("Not playing anything.")
@@ -101,7 +113,7 @@ class Music(commands.Cog):
         return await ctx.send("Paused.")
 
     @commands.command(pass_context = True)
-    async def resume(ctx):
+    async def resume(self, ctx):
         vc = ctx.voice_client
         if vc is None or (not vc.is_playing() and not vc.is_paused()):
             return await ctx.send("Not playing anything.")
@@ -110,3 +122,28 @@ class Music(commands.Cog):
         
         vc.resume()
         return await ctx.send("Resumed.")
+
+    @commands.command(pass_context = True)
+    async def lyrics(self, ctx):
+        if self.curr_audio is None:
+            await ctx.send("I am not playing anything right now.")
+            return
+        audio_name = self.curr_audio['title']
+
+        audio_name = remove_brackets(audio_name)
+        audio_name = remove_entities(audio_name)
+
+        try:
+            song = self.genius.search(audio_name, type_ = 'song')['sections'][0]['hits'][0]['result']
+        except:
+            song = None
+        
+        if song is None:
+            await ctx.send("Can't find the lyrics.")
+            return
+
+        message = ""
+        lyrics = self.genius.search_song(song_id = song['id']).lyrics.split('\n')
+        for message in divide_to_chunks(lyrics):
+            await ctx.send(message)
+        

@@ -1,0 +1,14 @@
+in music.py:
+-fixed the bug with pause and resume commands
+
+-added 'curr_song' as an atribute
+
+-divided 'get_source' into 2 functions, 'get_source' and 'get_audio'
+where 'get_audio' returns an audio info using ytdl search, and 'get_source' takes in audio url and returns an opus formatted source
+
+-if the audio queue is empty, instead of playing the audio directly, it is added to the queue
+and 'play_next_song' method is called
+
+-added 'formatting.py' for fomatting strings such as song names or messages
+
+-implemented '!lyrics' command to request currently playing song's lyrics using the 'lyricsgenius' module

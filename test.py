@@ -13,7 +13,7 @@ import json
 import time
 
 #import from apikeys
-from apikeys import *
+from config import *
 
 intents = discord.Intents.default()
 intents.members = True
@@ -97,7 +97,7 @@ async def vindiesel(ctx):
     print ("caption sent")
 
 
-client.run(TOKEN)
+client.run(DISCORD_BOT_TOKEN)
 
 #Half baked features
 '''
